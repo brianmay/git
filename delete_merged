@@ -1,0 +1,69 @@
+#!/usr/bin/python3
+import argparse
+
+from git import Repo
+
+def delete_merged(ref_name):
+    # Get the git repository.
+    repo = Repo('.', search_parent_directories=True)
+
+    # Get the list of possible reference branches.
+    if "/" in ref_name:
+        ref_remote_name, ref_branch_name = ref_name.split("/", maxsplit=1)
+        ref_list = repo.remote(ref_remote_name).refs
+        ref_list = [ r for r in ref_list if r.remote_head == ref_branch_name]
+    else:
+        ref_branch_name = ref_name
+        ref_list = repo.refs
+        ref_list = [ r for r in ref_list if r.name == ref_branch_name]
+
+    # We only want one reference branch.
+    assert len(ref_list) == 1
+    ref_branch = ref_list[0]
+
+    # Get the current active branch. We cannot delete this branch.
+    active_branch = repo.active_branch.name
+
+    # Recurse through all branches.
+    for branch in repo.branches:
+        # Skip branches we should never delete.
+        if branch.name in {'development', ref_branch_name}:
+            continue
+        if branch.name.startswith("project/"):
+            continue
+
+        # Check if branch was merged.
+        commits_ahead = repo.iter_commits(
+            '%s..%s' % (ref_branch.name, branch.name))
+        commits_ahead_count = sum(1 for c in commits_ahead)
+        is_merged = (commits_ahead_count == 0)
+
+        if is_merged:
+            # Branch was merged -> try to delete it.
+            print(branch.name, commits_ahead_count, ref_branch.name)
+
+            # ... except we cannot delete current branch.
+            if branch.name != active_branch:
+                print("-> Skipping %s as active branch." % branch.name)
+            else:
+                # Delete branch from remote.
+                # FIXME: We should not hardcode "brian" here.
+                if branch.name in repo.remotes.brian.refs:
+                    repo.remotes.brian.push(":" + branch.name)
+
+                # Delete branch locally.
+                repo.delete_head(branch.name, force=True)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Delete branches that have been merged into reference branch'
+    )
+    parser.add_argument(
+        'branch',
+        type=str,
+        help="The reference branch to use."
+    )
+    args = parser.parse_args()
+    delete_merged(args.branch)
+
+main()
