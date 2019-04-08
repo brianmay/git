@@ -43,7 +43,7 @@ def delete_merged(ref_name):
             print(branch.name, commits_ahead_count, ref_branch.name)
 
             # ... except we cannot delete current branch.
-            if branch.name != active_branch:
+            if branch.name == active_branch:
                 print("-> Skipping %s as active branch." % branch.name)
             else:
                 # Delete branch from remote.
